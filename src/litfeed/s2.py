@@ -23,6 +23,7 @@ from litfeed.paths import DATA_ROOT
 GRAPH_URL = "https://api.semanticscholar.org/graph/v1"
 RECOMMENDATIONS_URL = "https://api.semanticscholar.org/recommendations/v1"
 DEFAULT_CACHE_DIR = DATA_ROOT / "cache" / "s2"
+MAX_BACKOFF_SECONDS = 60
 
 
 def load_api_key(env_path: Path = DATA_ROOT / ".env") -> str | None:
@@ -52,7 +53,7 @@ class S2Client:
         self,
         cache_dir: Path = DEFAULT_CACHE_DIR,
         min_interval: float = 1.1,
-        max_retries: int = 6,
+        max_retries: int = 10,
     ) -> None:
         self.cache_dir = cache_dir
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -97,7 +98,11 @@ class S2Client:
                     detail = error.read().decode(errors="replace")[:500]
                     print(f"HTTP {error.code} on {url}: {detail}", file=sys.stderr)
                     raise
-                backoff = 2 ** (attempt + 1)
+                # honor Retry-After when S2 sends one; otherwise back off exponentially
+                retry_after = error.headers.get("Retry-After", "")
+                backoff = min(2 ** (attempt + 1), MAX_BACKOFF_SECONDS)
+                if retry_after.isdigit():
+                    backoff = min(int(retry_after), MAX_BACKOFF_SECONDS)
                 print(f"HTTP {error.code}; retrying in {backoff}s", file=sys.stderr)
                 time.sleep(backoff)
         raise RuntimeError("unreachable")
@@ -125,7 +130,8 @@ class S2Client:
         while True:
             params = {"fields": fields, "limit": page_size, "offset": offset}
             page = self.get(path, params, use_cache=use_cache)
-            results.extend(page.get("data", []))
+            # S2 sends "data": null for some papers (e.g. no listed references)
+            results.extend(page.get("data") or [])
             if "next" not in page:
                 return results
             offset = page["next"]
@@ -159,7 +165,7 @@ class S2Client:
     ) -> list[dict]:
         """Relevance search over papers (cached; `limit` <= 100)."""
         payload = self.get("/paper/search", {"query": query, "fields": fields, "limit": limit})
-        return payload.get("data", [])
+        return payload.get("data") or []
 
     def snippet_search(
         self,
@@ -168,7 +174,7 @@ class S2Client:
     ) -> list[dict]:
         """Full-text snippet search (cached). Results carry `paper.corpusId`, not `paperId`."""
         payload = self.get("/snippet/search", {"query": query, "limit": limit})
-        return payload.get("data", [])
+        return payload.get("data") or []
 
     def paper_batch(
         self,
