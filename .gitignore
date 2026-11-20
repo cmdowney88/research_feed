@@ -1,0 +1,11 @@
+# personal data lives in its own repository (see litfeed.paths)
+/data/
+cache/
+logs/
+fetches/
+.env
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/

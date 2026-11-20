@@ -1,0 +1,36 @@
+# Feed definitions. Each feed's seeds live in seeds/<name>.tsv (columns: paperId, year, source,
+# title). `description` is what the triage step reads to judge relevance, so keep it specific.
+# `priority` is informational (high/low); tiering is driven by taste/profile.md, not by it.
+# Feeds can also be created and seeded from the UI's /feeds page.
+
+# Your Semantic Scholar author ID (the number in your S2 author page URL). Optional: when set,
+# new papers citing your work are fetched as the `citing_me` source, and
+# scripts/seed_from_author.py can bootstrap seeds from your references.
+author_id: ""
+excluded_own_papers:
+  # paper IDs S2 misattributes to you
+
+feeds:
+  speech_feed:
+    priority: high
+    description: >-
+      Speech recognition for low-resource languages.
+
+  text_feed:
+    priority: low
+    description: >-
+      Adapting language models to new languages.
+
+  # a commented-out feed, kept to test that new feeds land above it
+  # future_feed:
+  #   priority: low
+
+# Papers by these authors get at least tier 3 (if the profile says so) and their new papers are
+# fetched directly. S2 often splits one person across several author IDs; list them all. The
+# UI's /feeds page searches S2 and adds them here.
+flagged_authors:
+  Ada Example: ["111", "222"]
+
+# Not a seed-based feed: new papers citing the author's work, queried directly.
+citing_me:
+  priority: high

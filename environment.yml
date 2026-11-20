@@ -1,0 +1,11 @@
+name: literature
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.10
+  - pyyaml
+  - ruamel.yaml
+  - pytest
+  - pip
+  - pip:
+      - -e .
