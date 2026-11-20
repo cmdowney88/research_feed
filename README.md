@@ -38,8 +38,11 @@ The first start creates your data directory and opens a **setup checklist** at
 1. **API keys and tools.** An Anthropic API key (required: triage, notes, and deep dives call
    Claude Code headlessly, `claude -p --bare`, which bills `ANTHROPIC_API_KEY`) and, optionally,
    a free [S2 API key](https://www.semanticscholar.org/product/api#api-key), which makes fetches
-   much faster. Both can be tested in place; they are saved to the data directory's `.env`.
-   It also checks for the `claude` CLI and (optional) `pdftotext`.
+   much faster. Both can be pasted and tested in place (they are saved to the data directory's
+   `.env`), but setting them yourself is slightly more secure: export `ANTHROPIC_API_KEY` and
+   `S2_API_KEY` in your shell before starting the server, or write them into `data/.env` by
+   hand (see [Local UI security](#local-ui-security)). It also checks for the `claude` CLI and
+   (optional) `pdftotext`.
 2. **You on Semantic Scholar** (optional): pick your S2 author profile, so papers citing your
    work are surfaced and the next steps can start from your publications.
 3. **Your research taste:** a profile in prose that triage reads. It can be drafted from your
@@ -95,7 +98,16 @@ dive ~$5.
 
 The UI binds to 127.0.0.1 only, accepts requests only with a localhost `Host` header, and
 accepts API calls only as same-origin JSON, so other websites open in your browser can't
-drive it. It has no login: anyone with a shell on your machine can use it.
+drive it. It has **no login yet** ([#1](https://github.com/cmdowney88/research_feed/issues/1)):
+any program running on your machine (or another user on a shared machine) can call it. No
+endpoint returns stored API keys, but such a program could replace them or start jobs that
+spend your Anthropic credit.
+
+For API keys, that makes setting them yourself slightly more secure than the setup page's
+paste boxes: export them in your shell before `python scripts/serve_ui.py`, or write
+`ANTHROPIC_API_KEY=...` and `S2_API_KEY=...` into the data directory's `.env` (keep it
+`chmod 600`). Either way the key never passes through the browser, where extensions with
+access to all sites can read form fields.
 
 ## Deep dives
 

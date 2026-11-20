@@ -107,8 +107,18 @@ root.append(step('data', '1. Data directory', () => true, false,
   const tools = status.tools;
   root.append(step('keys', '2. API keys and tools',
     s => s.keys.ANTHROPIC_API_KEY.set && s.tools.claude !== null, false,
-    el('p', {class: 'muted'}, 'Keys are stored in the data directory\'s .env (readable only by you) ' +
-       'and never shown again; the page only learns whether a key is set.'),
+    el('div', {class: 'note'},
+      el('p', {}, el('strong', {}, 'Slightly more secure: skip the boxes below. '),
+         'Either export the keys in your shell before starting the server, or write them into ',
+         code(status.dataDir + '/.env'), ' yourself:'),
+      el('pre', {}, 'ANTHROPIC_API_KEY=sk-ant-...\nS2_API_KEY=...'),
+      el('p', {}, 'Then restart ', code('scripts/serve_ui.py'), '; this step shows them as set. ' +
+         'Pasting here is convenient, but the key passes through your browser (where extensions ' +
+         'with access to all sites can read form fields), and this local server has no login yet, ' +
+         'so other programs on your machine could replace saved keys or start paid jobs (they ' +
+         'cannot read keys back). See the README\'s "Local UI security".')),
+    el('p', {class: 'muted'}, 'Keys pasted here are saved to the data directory\'s .env (readable ' +
+       'only by you) and never shown again; the page only learns whether a key is set.'),
     ...rows, el('div', {class: 'controls'}, save, saveStatus),
     el('h4', {}, 'Tools'),
     el('ul', {},
