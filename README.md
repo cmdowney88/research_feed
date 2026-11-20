@@ -93,3 +93,7 @@ bash tests/js/run_ui_smoke.sh && bash tests/js/run_manage_smoke.sh   # macOS (JX
 ```
 
 Tests use the fixture data in `tests/fixtures/data`, never your data directory.
+
+## License
+
+MIT; see [LICENSE](LICENSE).
