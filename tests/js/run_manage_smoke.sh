@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke-test the feeds page and the project page's deep-dive panels without a browser (macOS
+# Smoke-test the feeds, setup, and project pages' interactive parts without a browser (macOS
 # only: uses JXA). Page data comes from the real server code (the project page's pipeline state
 # is faked for the checkpoint and running scenarios); each scenario in tests/js/scenarios/
 # simulates clicks against tests/js/fake_dom.js and prints what it checked. Nothing is written:
@@ -37,6 +37,12 @@ data["pipeline"] = {"job": {"state": "running", "current": 1, "error": None, "lo
                                        ["synthesize", project]]},
                     "awaitingSeeds": False, "proposed": [], "related": [], "hasSynthesis": True}
 (work / "running.json").write_text(json.dumps(data))
+from litfeed.web.onboarding import setup_page_data
+setup_data = setup_page_data()
+# never let real key hints into test output
+for key in setup_data["status"]["keys"].values():
+    key["hint"] = ""
+(work / "setup.json").write_text(json.dumps(setup_data))
 PY
 run() {
   local scenario="$1" script="$2"
@@ -52,3 +58,4 @@ eval(read('$repo/tests/js/fake_dom.js') + '\n' + read('$repo/src/litfeed/web/sta
 run feeds feeds.js
 run checkpoint project.js
 run running project.js
+run setup setup.js

@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Install (or reinstall) the weekly launchd job; pass --uninstall to remove it.
+# Install (or reinstall) the weekly launchd job; pass --uninstall to remove it. macOS only.
 #
 # The job runs scripts/weekly.sh against $LITFEED_DATA as set when you run this installer
 # (else data/ in this checkout). Edit the schedule in configs/launchd/ and rerun to apply.
@@ -7,6 +7,7 @@
 # Run it now:     launchctl kickstart gui/$(id -u)/local.litfeed.weekly
 
 set -eu
+[[ "$(uname)" == Darwin ]] || { echo "weekly scheduling uses launchd and is macOS-only for now" >&2; exit 1; }
 REPO="${0:A:h:h}"
 DATA="${LITFEED_DATA:-$REPO/data}"
 DATA="${DATA:A}"

@@ -9,14 +9,14 @@ from litfeed import jobs
 
 @pytest.fixture
 def fake_jobs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    script = tmp_path / "fake_deep_dive.py"
+    script = tmp_path / "deep_dive.py"
     script.write_text(
         "import sys\n"
         "print('stage', sys.argv[1])\n"
         "sys.exit(3 if sys.argv[1] == 'fail' else 0)\n"
     )
     monkeypatch.setattr(jobs, "JOBS_DIR", tmp_path / "jobs")
-    monkeypatch.setattr(jobs, "DEEP_DIVE_SCRIPT", script)
+    monkeypatch.setattr(jobs, "SCRIPTS_DIR", tmp_path)
     monkeypatch.setattr(jobs, "ENV_PATH", tmp_path / "missing.env")
     return tmp_path
 

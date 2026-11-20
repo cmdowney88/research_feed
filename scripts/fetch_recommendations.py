@@ -105,6 +105,9 @@ def main() -> None:
             f"{len(negative_ids)} negative ({len(learned[feed.name]['negative'])} from ratings)",
             file=sys.stderr,
         )
+        if not positive_ids:
+            print(f"{feed.name}: no seeds yet; skipped", file=sys.stderr)
+            continue
         papers = client.recommend(
             positive_ids,
             negative_ids,

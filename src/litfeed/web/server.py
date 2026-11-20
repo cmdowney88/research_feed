@@ -12,7 +12,12 @@ Paper API (POST, JSON; every request carries `digest`, `project`, or `seeds`):
     /api/rate          {paperId, user_tier, note}            digest only
     /api/thumb         {paperId, thumb: "up"|"down"|null}    project only
     /api/save          {paperId, collection|null}            any; null unsaves
-Management API (POST, JSON): see `litfeed.web.manage.ROUTES`.
+    /setup             first-run checklist (keys, profile, feeds, schedule, first run)
+Management API (POST, JSON): see `litfeed.web.manage.ROUTES` and `litfeed.web.onboarding.ROUTES`.
+
+Requests are accepted only with a localhost `Host` header (against DNS rebinding), and POSTs only
+as `application/json` from this server's own origin, so other websites open in the browser
+can't drive the API (cross-site requests would otherwise reach 127.0.0.1).
 
 Page scripts and styles are files in `static/`; each page embeds its data as JSON.
 """
@@ -32,8 +37,13 @@ from litfeed.projects import list_projects, load_candidates, load_project_config
 from litfeed.projects import project_dir, set_thumb
 from litfeed.ratings import append_rating, load_ratings
 from litfeed.paths import DATA_ROOT
-from litfeed.web.manage import ROUTES, ApiError, feeds_page_body, feeds_page_data, fetch_record
+from litfeed.setup import setup_status
+from litfeed.web import onboarding
+from litfeed.web.manage import ROUTES as MANAGE_ROUTES
+from litfeed.web.manage import ApiError, feeds_page_body, feeds_page_data, fetch_record
 from litfeed.web.manage import new_dive_body, project_pipeline_data
+
+ROUTES = {**MANAGE_ROUTES, **onboarding.ROUTES}
 
 TRIAGE_DIR = DATA_ROOT / "triage"
 NOTES_DIR = DATA_ROOT / "notes"
@@ -107,9 +117,17 @@ def index_page() -> bytes:
             f'<li><a href="/project/{slug}">{html.escape(title)}</a>'
             f'<span class="muted">{details_text}</span></li>'
         )
+    banner = ""
+    if not setup_status()["ready"]:
+        banner = (
+            '<p class="panel">Not set up yet: <a href="/setup">finish setup</a> '
+            "(keys, taste profile, and a first feed) before the weekly run can work.</p>"
+        )
     body = (
         "<h1>Literature</h1>"
-        '<p><a href="/feeds">Feeds &amp; seeds</a> · <a href="/deepdive/new">New deep dive</a></p>'
+        + banner
+        + '<p><a href="/feeds">Feeds &amp; seeds</a> · <a href="/deepdive/new">New deep dive</a>'
+        ' · <a href="/setup">Setup</a></p>'
         "<h2>Digests</h2><ul>" + "".join(digest_items) + "</ul>"
         "<h2>Deep-dive projects</h2><ul>" + "".join(project_items) + "</ul>"
     )
@@ -273,7 +291,26 @@ class UIHandler(BaseHTTPRequestHandler):
     def _send_json(self, status: int, payload: dict) -> None:
         self._send(status, json.dumps(payload).encode(), "application/json")
 
+    def _allowed_hosts(self) -> set[str]:
+        port = self.server.server_address[1]
+        return {f"127.0.0.1:{port}", f"localhost:{port}"}
+
+    def _trusted(self, is_post: bool) -> bool:
+        """Reject foreign Host headers, and POSTs that aren't same-origin JSON."""
+        hosts = self._allowed_hosts()
+        if self.headers.get("Host", "") not in hosts:
+            return False
+        if not is_post:
+            return True
+        content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip()
+        origin = self.headers.get("Origin")
+        same_origin = origin is None or origin in {f"http://{host}" for host in hosts}
+        return content_type == "application/json" and same_origin
+
     def do_GET(self) -> None:
+        if not self._trusted(is_post=False):
+            self._send(403, b"forbidden", "text/plain")
+            return
         path = self.path.split("?", 1)[0]
         content = None
         if path in ("/", "/index.html"):
@@ -284,6 +321,13 @@ class UIHandler(BaseHTTPRequestHandler):
             content = project_page(path.removeprefix("/project/"))
         elif path == "/feeds":
             content = page("Feeds & seeds", feeds_page_body(), feeds_page_data(), "feeds.js")
+        elif path == "/setup":
+            content = page(
+                "Setup",
+                onboarding.setup_page_body(),
+                onboarding.setup_page_data(),
+                "setup.js",
+            )
         elif path == "/deepdive/new":
             content = page("New deep dive", new_dive_body(), {"context": {}}, "newdive.js")
         elif path.startswith("/static/"):
@@ -299,6 +343,9 @@ class UIHandler(BaseHTTPRequestHandler):
         self._send(200, content, "text/html; charset=utf-8")
 
     def do_POST(self) -> None:
+        if not self._trusted(is_post=True):
+            self._send_json(403, {"error": "forbidden: not a same-origin JSON request"})
+            return
         length = int(self.headers.get("Content-Length", 0))
         try:
             request = json.loads(self.rfile.read(length))

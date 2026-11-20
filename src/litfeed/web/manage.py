@@ -22,9 +22,11 @@ from litfeed.s2 import S2Client
 AUTHOR_FIELDS = "name,affiliations,paperCount,hIndex,papers.title,papers.year"
 MAX_PASTED_LINES = 100
 PROJECT_SEED_FIELDS = ["paperId", "year", "signals", "aspect", "title"]
+PLACEHOLDER_FEED = "example_feed"
 
-# one S2 client for the server; the lock keeps its throttle honest across request threads
-_client = S2Client(min_interval=1.1)
+# one S2 client for the server; the lock keeps its throttle honest across request threads, and
+# few retries keep a rate-limited page responsive (background jobs retry for minutes)
+_client = S2Client(min_interval=1.1, max_retries=3)
 _S2_LOCK = threading.Lock()
 
 
@@ -281,8 +283,15 @@ def api_feed_create(request: dict) -> tuple[int, dict]:
     link_project = request.get("linkProject")
     if link_project and project_dir(str(link_project)) is None:
         raise ApiError("unknown project")
+    # replace the data template's placeholder feed while it is still unused
+    placeholder = PLACEHOLDER_FEED if not read_seed_rows(PLACEHOLDER_FEED) else None
     try:
-        add_feed(name, str(request.get("description") or ""), str(request.get("priority")))
+        add_feed(
+            name,
+            str(request.get("description") or ""),
+            str(request.get("priority")),
+            replace=placeholder,
+        )
     except ValueError as error:
         raise ApiError(str(error)) from error
     write_seed_rows(name, unique_rows)

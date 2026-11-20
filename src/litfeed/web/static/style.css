@@ -78,3 +78,12 @@ form.stack label { display:block; margin:10px 0; }
 form.stack input:not([type=checkbox]) { width:100%; }
 form.stack label > span.muted { display:block; }
 form.stack textarea { width:100%; display:block; }
+/* setup checklist */
+.card.step h2 { margin-top:4px; }
+.card.step .mark { display:inline-block; width:1.2em; color:var(--muted); }
+.card.step.done { border-left:4px solid var(--saved); }
+.card.step.done .mark { color:var(--saved); }
+.candidate-list { max-height:420px; overflow:auto; border:1px solid var(--border);
+                  border-radius:6px; padding:4px 10px; margin:8px 0; }
+textarea.profile-editor { width:100%; font:13px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.step textarea { width:100%; }

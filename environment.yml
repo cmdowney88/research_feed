@@ -5,6 +5,8 @@ dependencies:
   - python>=3.10
   - pyyaml
   - ruamel.yaml
+  # optional: lets the setup page test an Anthropic key without spending tokens
+  - anthropic
   - pytest
   - pip
   - pip:

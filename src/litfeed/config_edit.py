@@ -98,14 +98,17 @@ def add_feed(
     description: str,
     priority: str = "high",
     config_path: Path = CONFIG_PATH,
+    replace: str | None = None,
 ) -> None:
-    """Append a feed definition under `feeds:`.
+    """Append a feed definition under `feeds:`, or put it in place of the feed `replace`
+    (used to swap out the template's placeholder feed).
 
     Args:
         name: Feed key (lowercase letters, digits, underscores); also the seed file stem.
         description: What triage reads to judge relevance; wrapped as a folded block.
         priority: "high" or "low".
         config_path: The feeds config (override in tests).
+        replace: Name of a feed to remove and take the place of, if present.
 
     Raises:
         ValueError: On a malformed, reserved, or existing name, empty description, or bad
@@ -128,10 +131,20 @@ def add_feed(
         if name in data["feeds"]:
             raise ValueError(f"feed {name!r} already exists")
         feeds = data["feeds"]
-        previous_last = feeds[list(feeds)[-1]] if feeds else None
-        feeds[name] = _yaml().load(snippet)
-        if isinstance(previous_last, CommentedMap):
-            _move_trailing_comment(previous_last, feeds[name])
+        new_feed = _yaml().load(snippet)
+        if replace is not None and replace in feeds:
+            # take the placeholder's place, and its trailing comments if it was last
+            position = list(feeds).index(replace)
+            placeholder = feeds[replace]
+            feeds.insert(position, name, new_feed)
+            if isinstance(placeholder, CommentedMap):
+                _move_trailing_comment(placeholder, feeds[name])
+            del feeds[replace]
+        else:
+            previous_last = feeds[list(feeds)[-1]] if feeds else None
+            feeds[name] = new_feed
+            if isinstance(previous_last, CommentedMap):
+                _move_trailing_comment(previous_last, feeds[name])
         _dump(data, config_path)
 
 
@@ -149,3 +162,24 @@ def _move_trailing_comment(source: CommentedMap, target: CommentedMap) -> None:
         return
     target.ca.items[list(target)[-1]] = [None, None, comments[2], None]
     comments[2] = CommentToken("\n", CommentMark(0))
+
+
+def set_author_id(
+    author_id: str,
+    config_path: Path = CONFIG_PATH,
+) -> None:
+    """Set the user's own S2 author ID (`author_id`), adding the key if it is missing.
+
+    Raises:
+        ValueError: If the ID is not numeric.
+    """
+    author_id = str(author_id).strip()
+    if not author_id.isdigit():
+        raise ValueError("author IDs are numeric S2 IDs")
+    with _CONFIG_LOCK:
+        data = _load(config_path)
+        if "author_id" in data:
+            data["author_id"] = DoubleQuotedScalarString(author_id)
+        else:
+            data.insert(0, "author_id", DoubleQuotedScalarString(author_id))
+        _dump(data, config_path)

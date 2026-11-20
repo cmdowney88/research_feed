@@ -96,6 +96,26 @@ Known quirks: the first digest's `citing_me` set is the full citation backlog, n
 papers; undated papers by flagged authors pass the 60-day window; S2 author profiles can mix
 in other people's papers; the UI's JavaScript is tested only against a fake DOM (JXA).
 
+## Setup page
+
+`/setup` (`litfeed.web.onboarding` + `static/setup.js`, logic in `litfeed.setup`) is the
+first-run checklist; `scripts/serve_ui.py` creates the data directory on start
+(`setup.init_data_dir`), loads `.env` into the process, and opens /setup until
+`setup_status()["ready"]` (Anthropic key + `claude` CLI + a non-template profile + one seeded
+feed). Steps: keys saved to `.env` (mode 600; tested via S2 search and the `anthropic` SDK's
+free `models.list`), S2 author ID (`config_edit.set_author_id`), a profile drafted by one
+`claude -p` call from the author's recent abstracts plus the user's notes
+(`prompts/profile_draft.md`, ~$0.03), seed bootstrap (`seed_from_author.py` as job
+`setup-seeds`, then tick candidates into a feed; the first feed replaces the template's
+unused `example_feed`), launchd schedule (`setup.install_schedule`, plistlib; one job per user,
+so status flags a job installed for another data directory), and a first run (`weekly.sh` as
+job `weekly`). **Weekly automation is macOS-only** (launchd, osascript); keep the README's
+platform note in sync if that changes.
+
+The server rejects non-localhost `Host` headers and non-same-origin or non-JSON POSTs
+(`UIHandler._trusted`); keep every new endpoint behind it. Job status files are written
+atomically (`jobs._write_status`) because pages poll them while jobs write.
+
 ## Conventions
 
 - Per-feed `seeds/*.tsv` are curated data: never regenerate or overwrite them from a script;

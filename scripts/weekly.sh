@@ -1,5 +1,6 @@
 #!/bin/zsh
 # Weekly literature run: fetch -> triage -> tier-1 notes -> digest, then a macOS notification.
+# macOS only for now (osascript notifications; scheduled by launchd).
 #
 # Run by launchd (see configs/launchd/ and scripts/install_weekly.sh) or by hand. The data
 # directory is $LITFEED_DATA, else data/ in this checkout. launchd does not read ~/.zshrc, so
@@ -32,16 +33,21 @@ fail() {
 mkdir -p "$DATA/logs"
 echo "=== weekly run $(date) ===" >>"$LOG"
 
-# load KEY=VALUE lines from .env without echoing them
+# load non-empty KEY=VALUE lines from .env without echoing them; values already in the
+# environment win (an empty placeholder line never blanks a key)
 if [[ -f "$DATA/.env" ]]; then
-  set -a
-  source "$DATA/.env"
-  set +a
+  while IFS='=' read -r key value; do
+    key="${${key#export }// /}"
+    [[ -z "$key" || "$key" == \#* || -z "$value" ]] && continue
+    [[ -n "${(P)key:-}" ]] && continue
+    value="${value#[\"\']}"
+    export "$key=${value%[\"\']}"
+  done < "$DATA/.env"
 fi
 export LITFEED_DATA="$DATA"
 PYTHON="${LITFEED_PYTHON:-python3}"
-[[ -n "${S2_API_KEY:-}" ]] || fail "S2_API_KEY not set in .env"
 [[ -n "${ANTHROPIC_API_KEY:-}" ]] || fail "ANTHROPIC_API_KEY not set in .env"
+[[ -n "${S2_API_KEY:-}" ]] || echo "WARNING: no S2_API_KEY; using the slower public rate limit" >>"$LOG"
 "$PYTHON" -c "import litfeed" 2>/dev/null || fail "$PYTHON cannot import litfeed (set LITFEED_PYTHON)"
 
 # skip if today's digest already exists (e.g. a manual run earlier today)

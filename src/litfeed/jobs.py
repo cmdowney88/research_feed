@@ -1,10 +1,10 @@
-"""Run deep-dive stages in the background for the web UI.
+"""Run scripts in the background for the web UI (deep-dive stages, setup, the weekly run).
 
-A job is a list of `scripts/deep_dive.py` stages run one after another in a subprocess. Its
-status lives in `logs/jobs/<slug>.json` and its output in `logs/jobs/<slug>.log` in the data
-directory (gitignored),
-so the project page can poll them. Only one job runs at a time: concurrent jobs would share the
-Semantic Scholar rate limit and mostly trade 429 retries.
+A job is a list of argument lists for one script in `scripts/` (by default `deep_dive.py`), run
+one after another in subprocesses. Its status lives in `logs/jobs/<name>.json` and its output in
+`logs/jobs/<name>.log` in the data directory (gitignored), so pages can poll them. Deep-dive
+jobs are named by project slug; setup uses `setup-seeds` and `weekly`. Only one job runs at a
+time: concurrent jobs would share the Semantic Scholar rate limit and mostly trade 429 retries.
 
 Stages run in the server's process group, so stopping the server stops a running stage; the
 job then shows as interrupted and can be resumed from the stage it was on (S2 lookups are
@@ -22,7 +22,7 @@ from pathlib import Path
 from litfeed.paths import CODE_ROOT, DATA_ROOT
 
 JOBS_DIR = DATA_ROOT / "logs" / "jobs"
-DEEP_DIVE_SCRIPT = CODE_ROOT / "scripts" / "deep_dive.py"
+SCRIPTS_DIR = CODE_ROOT / "scripts"
 ENV_PATH = DATA_ROOT / ".env"
 
 _JOBS_LOCK = threading.Lock()
@@ -48,13 +48,18 @@ def _status_path(slug: str) -> Path:
 
 
 def _write_status(slug: str, status: dict) -> None:
+    """Write the status atomically, so a concurrent reader never sees a half-written file."""
     JOBS_DIR.mkdir(parents=True, exist_ok=True)
-    _status_path(slug).write_text(json.dumps(status, indent=1))
+    temporary = _status_path(slug).with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(status, indent=1))
+    os.replace(temporary, _status_path(slug))
 
 
 def _environment() -> dict[str, str]:
-    """The server's environment plus KEY=VALUE lines from `.env` (API keys)."""
+    """The server's environment plus KEY=VALUE lines from `.env` (API keys), with
+    `LITFEED_DATA` pinned so every job uses this server's data directory."""
     environment = dict(os.environ)
+    environment["LITFEED_DATA"] = str(DATA_ROOT)
     if ENV_PATH.exists():
         for line in ENV_PATH.read_text().splitlines():
             key, separator, value = line.partition("=")
@@ -92,12 +97,17 @@ def active_job() -> str | None:
     return None
 
 
-def start_job(slug: str, stages: list[list[str]]) -> dict:
+def start_job(
+    slug: str,
+    stages: list[list[str]],
+    script: str = "deep_dive.py",
+) -> dict:
     """Start running `stages` for `slug` in a background thread.
 
     Args:
-        slug: Project slug (also names the status and log files).
-        stages: Argument lists for `scripts/deep_dive.py`, run in order.
+        slug: Job name (a project slug for deep dives); names the status and log files.
+        stages: Argument lists for the script, run in order.
+        script: File name in `scripts/`; `.sh` scripts run with zsh, others with this Python.
 
     Returns:
         The initial status.
@@ -111,6 +121,7 @@ def start_job(slug: str, stages: list[list[str]]) -> dict:
                 raise RuntimeError(f"a deep-dive job is already running ({other})")
         status = {
             "slug": slug,
+            "script": script,
             "stages": stages,
             "current": 0,
             "state": "running",
@@ -130,21 +141,27 @@ def resume_job(slug: str) -> dict:
     status = job_status(slug)
     if status is None or status["state"] not in ("interrupted", "failed"):
         raise RuntimeError("nothing to resume")
-    return start_job(slug, status["stages"][status["current"] :])
+    return start_job(
+        slug,
+        status["stages"][status["current"] :],
+        status.get("script", "deep_dive.py"),
+    )
 
 
 def _run(slug: str, status: dict) -> None:
     log_path = JOBS_DIR / f"{slug}.log"
     environment = _environment()
+    script_path = SCRIPTS_DIR / status["script"]
+    interpreter = ["/bin/zsh"] if script_path.suffix == ".sh" else [sys.executable]
     try:
         for index, stage in enumerate(status["stages"]):
             status["current"] = index
             _write_status(slug, status)
             with log_path.open("a") as log:
-                log.write(f"\n=== {_now()} deep_dive.py {' '.join(stage)}\n")
+                log.write(f"\n=== {_now()} {status['script']} {' '.join(stage)}\n")
                 log.flush()
                 completed = subprocess.run(
-                    [sys.executable, str(DEEP_DIVE_SCRIPT), *stage],
+                    [*interpreter, str(script_path), *stage],
                     cwd=CODE_ROOT,
                     env=environment,
                     stdout=log,
@@ -152,7 +169,8 @@ def _run(slug: str, status: dict) -> None:
                 )
             if completed.returncode != 0:
                 status["state"] = "failed"
-                status["error"] = f"stage '{stage[0]}' exited with {completed.returncode}"
+                label = stage[0] if stage else status["script"]
+                status["error"] = f"stage '{label}' exited with {completed.returncode}"
                 break
         else:
             status["state"] = "done"
